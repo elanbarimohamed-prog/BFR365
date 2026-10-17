@@ -189,6 +189,32 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
+if compact:
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] [data-testid="stButton"] button,
+    [data-testid="stSidebar"] [data-testid="stButton"] button:hover,
+    [data-testid="stSidebar"] [data-testid="stButton"] button:active,
+    [data-testid="stSidebar"] [data-testid="stButton"] button[kind="primary"] {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] button p {
+        color: #bdcddd !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] button:hover p,
+    [data-testid="stSidebar"] [data-testid="stButton"] button[kind="primary"] p {
+        color: #80e0cf !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] button:focus-visible {
+        outline: 2px solid #80e0cf;
+        outline-offset: 2px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
 with st.sidebar:
     st.button('›' if compact else '‹  Replier', key='toggle_navigation',
               help='Déplier la navigation' if compact else 'Replier en mode icônes',
