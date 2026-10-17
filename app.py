@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import math
+from html import escape
 from datetime import date, timedelta
 
 st.set_page_config(page_title='BFR360 | Tableau de bord', page_icon='📊',
@@ -8,21 +9,48 @@ st.set_page_config(page_title='BFR360 | Tableau de bord', page_icon='📊',
 
 st.markdown("""
 <style>
-.stApp { background: #f4f7fb; color: #182b49; }
-[data-testid="stHeader"] { background: #f4f7fb; }
+.stApp { background: #0d1422; color: #e9eff8; }
+[data-testid="stHeader"] { background: #0d1422; }
 .block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1500px; }
-[data-testid="stSidebar"] { background: #eef2f8; }
-[data-testid="stMetric"] { background: #ffffff; border: 1px solid #e0e7f0;
- border-radius: 16px; padding: 22px; box-shadow: 0 4px 16px #152b4910; }
-[data-testid="stMetricLabel"] { color: #52657e; }
-[data-testid="stMetricValue"] { color: #182b49; font-weight: 700; }
-.hero { background: linear-gradient(110deg, #132c4c, #1b5364);
- padding: 30px 34px; border-radius: 20px; margin: 12px 0 25px; color: white; }
-.hero .eyebrow { color: #89ded0; font-size: 12px; letter-spacing: 2px; font-weight: 700; }
-.hero h1 { color: white; font-size: clamp(26px, 4vw, 40px); padding: 10px 0; }
-.hero p { color: #d6e5ef; margin: 0; }
-.section-label { color: #52718a; text-transform: uppercase; font-size: 12px;
+[data-testid="stSidebar"] { background: #121d2e; }
+[data-testid="stMarkdownContainer"], [data-testid="stWidgetLabel"],
+[data-testid="stMetricLabel"] { color: #e9eff8; }
+[data-testid="stCaptionContainer"] { color: #a4b3c9; }
+h1, h2, h3 { color: #e9eff8 !important; }
+[data-testid="stMetric"] { background: #172235; border: 1px solid #293951;
+ border-radius: 16px; padding: 22px; }
+[data-testid="stMetricValue"] { color: #f4f8ff; font-weight: 700; }
+[data-testid="stPopoverButton"], [data-testid="stSidebarCollapsedControl"] button,
+[data-testid="collapsedControl"] button, [data-testid="stSidebarCollapseButton"] button {
+ background: #22334c !important; color: #f0f5ff !important;
+ border: 1px solid #506480 !important; border-radius: 10px; }
+[data-testid="stPopoverButton"] p { color: #f0f5ff !important; }
+[data-testid="stPopoverBody"] { background: #172235; color: #e9eff8; }
+[data-testid="stPopoverButton"]:hover,
+[data-testid="stSidebarCollapsedControl"] button:hover,
+[data-testid="stSidebarCollapseButton"] button:hover { background: #314765 !important; }
+.hero { background: linear-gradient(110deg, #172942, #173942);
+ border: 1px solid #2a4556; padding: 26px 32px; border-radius: 18px; margin: 12px 0 24px; }
+.hero .eyebrow { color: #7bd9cc; font-size: 12px; letter-spacing: 2px; font-weight: 700; }
+.hero h1 { font-size: clamp(26px, 4vw, 38px); padding: 10px 0; }
+.hero p { color: #bdcddd; margin: 0; }
+.section-label { color: #8fa8c3; text-transform: uppercase; font-size: 12px;
  letter-spacing: 1.5px; font-weight: 700; margin-top: 24px; }
+.state-card { background: #172235; border: 1px solid #293951; padding: 22px;
+ border-radius: 14px; margin: 12px 0; min-height: 145px; }
+.state-card strong { font-size: 22px; color: #eef5ff; }
+.state-card p { color: #b5c5d9; margin: 8px 0 0; }
+.alert-card { padding: 16px 20px; border: 1px solid #293951; border-left: 4px solid;
+ border-radius: 10px; background: #172235; margin: 10px 0; }
+.alert-card.critical { border-left-color: #ff7182; }
+.alert-card.high { border-left-color: #ffb366; }
+.alert-card.watch { border-left-color: #e3cd79; }
+.alert-card .priority { font-size: 11px; font-weight: 700; letter-spacing: 1px; }
+.critical .priority { color: #ff9ca7; }
+.high .priority { color: #ffca91; }
+.watch .priority { color: #e3cd79; }
+.alert-card strong { color: #edf3fd; }
+.alert-card p { color: #b5c5d9; margin: 6px 0 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -72,6 +100,30 @@ def validate_history(df):
     numeric(df, ['Stocks', 'Créances clients', 'Dettes fournisseurs'])
     df['BFR'] = df['Stocks'] + df['Créances clients'] - df['Dettes fournisseurs']
     return df.sort_values('Date').reset_index(drop=True)
+
+
+def build_alerts(stocks_df, clients_df, suppliers_df, today):
+    alerts = []
+    for _, row in stocks_df.iterrows():
+        qty, threshold = row['Quantité'], row['Seuil minimum']
+        if qty == 0:
+            alerts.append((0, 0, 'critical', 'CRITIQUE · RUPTURE',
+                f"{row['Produit']} : stock épuisé",
+                'Réapprovisionnement à traiter en priorité.'))
+        elif qty <= threshold:
+            alerts.append((2, qty / threshold if threshold else 0, 'watch', 'À SURVEILLER · STOCK',
+                f"{row['Produit']} : stock faible",
+                f"{qty:g} unités disponibles pour un seuil de {threshold:g}. Préparer le réapprovisionnement."))
+    for df, name, kind, action in [
+        (clients_df, 'Client', 'CRÉANCE', 'Relancer le client.'),
+        (suppliers_df, 'Fournisseur', 'DETTE', 'Vérifier le règlement avec le fournisseur.')]:
+        for _, row in df.iterrows():
+            if not row['Payée'] and row['Échéance'] < today:
+                days = (today - row['Échéance']).days
+                alerts.append((1, -days, 'high', f'PRIORITÉ HAUTE · {kind}',
+                    f"{row[name]} : {money(row['Montant (DH)'])} en retard",
+                    f"Échéance du {row['Échéance']:%d/%m/%Y} · {days} jour(s) de retard. {action}"))
+    return sorted(alerts, key=lambda item: (item[0], item[1]))
 
 
 stocks_demo = pd.DataFrame([
@@ -145,10 +197,49 @@ m2.metric('Valeur des stocks', money(stock_value))
 m3.metric('Créances clients', money(receivables))
 m4.metric('Dettes fournisseurs', money(payables))
 
-st.markdown('<div class="section-label">Tableau de bord</div>', unsafe_allow_html=True)
-left, right = st.columns([2, 1])
+
+low = int((s['Quantité'] <= s['Seuil minimum']).sum())
+empty = int((s['Quantité'] == 0).sum())
+left, right = st.columns(2)
 with left:
-    st.subheader('Évolution du BFR')
+    st.subheader('État actuel du BFR')
+    bfr_label = 'Besoin de financement' if bfr > 0 else 'Ressource d’exploitation' if bfr < 0 else 'Équilibre du cycle'
+    st.markdown(f'<div class="state-card"><strong>{bfr_label}</strong>'
+                f'<p>{money(abs(bfr))} · situation calculée à partir des soldes actuels.</p>'
+                '<p>À apprécier au regard de l’activité et du financement disponible.</p></div>',
+                unsafe_allow_html=True)
+    st.bar_chart(pd.DataFrame({'Montant (DH)': [stock_value, receivables, -payables]},
+                 index=['Stocks', 'Créances', 'Dettes']), color='#52cbbb', height=230)
+    st.caption('Composition actuelle en DH · les dettes réduisent le besoin.')
+with right:
+    st.subheader('État actuel des stocks')
+    stock_label = 'Rupture de stock' if empty else 'Réapprovisionnement à prévoir' if low else 'Stocks au-dessus des seuils'
+    if s.empty:
+        stock_label = 'Aucun produit renseigné'
+    st.markdown(f'<div class="state-card"><strong>{stock_label}</strong>'
+                f'<p>{len(s)} référence(s) · {low} au seuil ou en dessous · {empty} en rupture.</p>'
+                f'<p>Valeur totale : {money(stock_value)}.</p></div>', unsafe_allow_html=True)
+    s_display = s.copy()
+    s_display['Valeur (DH)'] = s_display['Quantité'] * s_display['Coût unitaire (DH)']
+    s_display['Statut'] = s_display.apply(lambda r: 'Rupture' if r['Quantité'] == 0 else
+        'À réapprovisionner' if r['Quantité'] <= r['Seuil minimum'] else 'Disponible', axis=1)
+    st.dataframe(s_display[['Produit', 'Quantité', 'Seuil minimum', 'Statut']],
+                 use_container_width=True, hide_index=True)
+
+st.subheader('Alertes prioritaires')
+st.caption('Ordre : ruptures de stock → paiements en retard (les plus anciens d’abord) '
+           '→ stocks faibles (les plus proches de la rupture d’abord).')
+alerts = build_alerts(s, c, f, date.today())
+if not alerts:
+    st.success('Aucune alerte selon les règles de stock et d’échéance.')
+for _, _, severity, priority, title, detail in alerts:
+    st.markdown(f'<div class="alert-card {severity}"><div class="priority">{escape(priority)}</div>'
+                f'<strong>{escape(title)}</strong><p>{escape(detail)}</p></div>', unsafe_allow_html=True)
+
+st.divider()
+show_history = st.toggle('Afficher le dashboard d’évolution', value=False)
+if show_history:
+    st.subheader('Évolution du cycle d’exploitation')
     history = None
     if historique is not None:
         try:
@@ -175,50 +266,30 @@ with left:
             cutoff = history['Date'].max() - pd.DateOffset(months=months)
             filtered = history.loc[history['Date'] > cutoff].copy()
         chart_data = filtered.set_index('Date')
-        if len(filtered) > 1:
-            st.line_chart(chart_data[['BFR']], color='#128578', height=310)
-            delta = filtered['BFR'].iloc[-1] - filtered['BFR'].iloc[0]
-            st.caption(f"Du {filtered['Date'].iloc[0]:%d/%m/%Y} au {filtered['Date'].iloc[-1]:%d/%m/%Y} "
-                       f"· Variation du BFR : {'+' if delta > 0 else ''}{money(delta)}")
-        else:
-            st.info('Une seule observation sur cette période : au moins deux sont nécessaires pour tracer une évolution.')
-        with st.expander('Voir les composantes et les valeurs historiques'):
-            if len(filtered) > 1:
-                st.line_chart(chart_data[['Stocks', 'Créances clients', 'Dettes fournisseurs']], height=260)
+        st.caption(f"Du {filtered['Date'].iloc[0]:%d/%m/%Y} au {filtered['Date'].iloc[-1]:%d/%m/%Y} · montants en DH")
+        if len(filtered) < 2:
+            st.info('Une seule observation : au moins deux dates sont nécessaires pour tracer une évolution.')
+        panels = [('BFR', '#52cbbb'), ('Stocks', '#78afff'),
+                  ('Créances clients', '#c2a0ff'), ('Dettes fournisseurs', '#ffbf80')]
+        for offset in (0, 2):
+            cols = st.columns(2)
+            for col, (name, color) in zip(cols, panels[offset:offset+2]):
+                with col:
+                    st.markdown(f'#### {name}')
+                    change = filtered[name].iloc[-1] - filtered[name].iloc[0]
+                    st.metric('Dernier solde de la période', money(filtered[name].iloc[-1]),
+                              delta=money(change) if len(filtered) > 1 else None,
+                              delta_color='off')
+                    if len(filtered) > 1:
+                        st.line_chart(chart_data[[name]], color=color, height=240)
+        with st.expander('Consulter les valeurs historiques'):
             st.dataframe(filtered, use_container_width=True, hide_index=True)
-with right:
-    st.subheader('Composition actuelle')
-    st.caption('Montants en DH · les dettes réduisent le besoin.')
-    st.bar_chart(pd.DataFrame({'Montant (DH)': [stock_value, receivables, -payables]},
-                 index=['Stocks', 'Créances', 'Dettes']), color='#268caa', height=310)
-    late = c.loc[(~c['Payée']) & (c['Échéance'] < date.today()), 'Montant (DH)'].sum()
-    low = int((s['Quantité'] <= s['Seuil minimum']).sum())
-    st.caption(f'{low} produit(s) au seuil ou en dessous · {money(late)} de créances en retard')
 
-st.subheader('Détail des opérations')
-stock_tab, clients_tab, suppliers_tab, alert_tab = st.tabs(['📦 Stocks','👥 Clients','🚚 Fournisseurs','🔔 Alertes'])
-with stock_tab:
-    s_display=s.copy()
-    s_display['Valeur (DH)']=s_display['Quantité']*s_display['Coût unitaire (DH)']
-    s_display['Statut']=s_display.apply(lambda r:'⚠️ À réapprovisionner' if r['Quantité']<=r['Seuil minimum'] else '✅ OK',axis=1)
-    st.dataframe(s_display,use_container_width=True,hide_index=True)
-with clients_tab:
-    st.dataframe(c,use_container_width=True,hide_index=True)
-with suppliers_tab:
-    st.dataframe(f,use_container_width=True,hide_index=True)
-with alert_tab:
-    count=0
-    for _,r in s.iterrows():
-        if r['Quantité']<=r['Seuil minimum']:
-            st.warning(f"Stock faible : {r['Produit']} ({r['Quantité']} unités, seuil {r['Seuil minimum']}).")
-            count+=1
-    for _,r in c.iterrows():
-        if not r['Payée'] and r['Échéance']<date.today():
-            st.error(f"Créance en retard : {r['Client']} — {r['Montant (DH)']:,.0f} DH, échéance {r['Échéance']}.")
-            count+=1
-    for _,r in f.iterrows():
-        if not r['Payée'] and r['Échéance']<date.today():
-            st.warning(f"Dette fournisseur échue : {r['Fournisseur']} — {r['Montant (DH)']:,.0f} DH.")
-            count+=1
-    if count==0:
-        st.success('Aucune alerte sur ces règles.')
+with st.expander('Consulter le détail des opérations', expanded=False):
+    stock_tab, clients_tab, suppliers_tab = st.tabs(['Stocks', 'Clients', 'Fournisseurs'])
+    with stock_tab:
+        st.dataframe(s_display, use_container_width=True, hide_index=True)
+    with clients_tab:
+        st.dataframe(c, use_container_width=True, hide_index=True)
+    with suppliers_tab:
+        st.dataframe(f, use_container_width=True, hide_index=True)
