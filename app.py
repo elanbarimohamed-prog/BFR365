@@ -1,11 +1,12 @@
 import streamlit as st
 import pandas as pd
 import math
+from io import BytesIO
 from html import escape
 from datetime import date, timedelta
 
 st.set_page_config(page_title='BFR360 | Tableau de bord', page_icon='📊',
-                   layout='wide', initial_sidebar_state='collapsed')
+                   layout='wide', initial_sidebar_state='expanded')
 
 st.markdown("""
 <style>
@@ -51,26 +52,23 @@ h1, h2, h3 { color: #e9eff8 !important; }
 .watch .priority { color: #e3cd79; }
 .alert-card strong { color: #edf3fd; }
 .alert-card p { color: #b5c5d9; margin: 6px 0 0; }
+
+/* A narrow, persistent navigation rail on desktop; native drawer on mobile. */
+[data-testid="stSidebar"] { min-width: 184px !important; max-width: 184px !important;
+ background: #101827; border-right: 1px solid #293951; }
+[data-testid="stSidebarUserContent"] { padding: 18px 12px; }
+[data-testid="stSidebar"] [data-testid="stButton"] button {
+ width: 100%; min-height: 66px; border-radius: 12px; text-align: left;
+ background: #172235; color: #dce7f5; border: 1px solid #293951; margin-bottom: 8px; }
+[data-testid="stSidebar"] [data-testid="stButton"] button:hover {
+ background: #243851; border-color: #52cbbb; }
+[data-testid="stSidebar"] [data-testid="stButton"] button[kind="primary"] {
+ background: #21443f; border-color: #52cbbb; color: #a9f6e9; }
+.nav-brand { font-size: 22px; font-weight: 800; letter-spacing: 1px;
+ color: #80e0cf; padding: 12px 4px 24px; }
+.nav-foot { font-size: 11px; color: #8fa8c3; padding: 24px 4px; }
 </style>
 """, unsafe_allow_html=True)
-
-with st.popover('ⓘ Infos'):
-    st.markdown('### Comprendre le BFR')
-    st.markdown('**BFR simplifié = Stocks + Créances clients − Dettes fournisseurs**')
-    st.write("Un BFR positif représente un besoin de financement du cycle d’exploitation. "
-             "Un BFR négatif représente une ressource issue de ce cycle.")
-    st.caption("Une analyse comptable complète prend aussi en compte les autres postes "
-               "d’exploitation pertinents. Le BFR n’est pas le solde bancaire.")
-    st.markdown('**Historique :** une ligne par date, avec les soldes de stocks, '
-                'créances non payées et dettes non payées à cette date.')
-    st.caption('Prototype pédagogique • montants en dirhams (DH).')
-
-st.markdown('<div class="hero"><div class="eyebrow">BFR360 · PILOTAGE FINANCIER</div>'
-            '<h1>Votre cycle d’exploitation, en un regard.</h1>'
-            '<p>Suivez vos besoins de financement, vos stocks et vos échéances.</p></div>',
-            unsafe_allow_html=True)
-st.caption('Ouvrez ou masquez le panneau Données avec la flèche en haut à gauche.')
-
 
 def money(value):
     return f'{value:,.0f} DH'.replace(',', ' ')
@@ -142,23 +140,102 @@ fournisseurs_demo = pd.DataFrame([
     {'Fournisseur':'Fournisseur Y','Montant (DH)':11000,'Échéance':date.today()-timedelta(days=3),'Payée':False},
 ])
 
+
+if 'active_view' not in st.session_state:
+    st.session_state.active_view = 'Dashboard'
+
+
+def navigate(view):
+    st.session_state.active_view = view
+
+
 with st.sidebar:
-    st.header('Données')
-    st.caption('Cliquez sur la flèche en haut du panneau pour le masquer.')
-    st.write('Importez vos fichiers CSV ou explorez les exemples intégrés.')
-    stocks = st.file_uploader('Stocks (CSV)', type='csv')
-    clients = st.file_uploader('Créances clients (CSV)', type='csv')
-    fournisseurs = st.file_uploader('Dettes fournisseurs (CSV)', type='csv')
-    st.divider()
-    historique = st.file_uploader('Historique des soldes (CSV)', type='csv')
-    with st.expander('Format de l’historique'):
-        st.write('Colonnes : Date, Stocks, Créances clients, Dettes fournisseurs. '
-                 'Montants en DH ; dates au format AAAA-MM-JJ. '
-                 'Chaque ligne représente les soldes à cette date, pas les flux de la période.')
+    st.markdown('<div class="nav-brand">BFR360</div>', unsafe_allow_html=True)
+    for label, icon in [('Infos', 'ⓘ'), ('Données', '▤'),
+                        ('Dashboard', '▦'), ('Évolution historique', '↗')]:
+        st.button(f'{icon}  {label}', key=f'nav_{label}',
+                  type='primary' if st.session_state.active_view == label else 'secondary',
+                  use_container_width=True, on_click=navigate, args=(label,), help=label)
+    st.markdown('<div class="nav-foot">PILOTAGE FINANCIER<br>Montants en DH</div>', unsafe_allow_html=True)
+
+view = st.session_state.active_view
+
+
+def remember_upload(widget_key, storage_key):
+    uploaded = st.session_state.get(widget_key)
+    st.session_state[storage_key] = (
+        {'name': uploaded.name, 'bytes': uploaded.getvalue()} if uploaded is not None else None)
+
+
+def current_file(storage_key):
+    saved = st.session_state.get(storage_key)
+    return BytesIO(saved['bytes']) if saved is not None else None
+
+
+def forget_upload(storage_key, widget_key):
+    st.session_state.pop(storage_key, None)
+    st.session_state.pop(widget_key, None)
+
+
+if view == 'Infos':
+    st.title('Infos')
+    st.markdown('### Comprendre le BFR')
+    st.markdown('**BFR simplifié = Stocks + Créances clients − Dettes fournisseurs**')
+    st.write("Un BFR positif représente un besoin de financement du cycle d’exploitation. "
+             "Un BFR négatif représente une ressource issue de ce cycle.")
+    st.caption("Une analyse comptable complète prend aussi en compte les autres postes "
+               "d’exploitation pertinents. Le BFR n’est pas le solde bancaire.")
+    st.markdown('**Historique :** une ligne par date, avec les soldes de stocks, '
+                'créances non payées et dettes non payées à cette date.')
+    st.caption('Prototype pédagogique • montants en dirhams (DH).')
+
+    st.markdown('### Se repérer dans BFR360')
+    st.write('**Données** : importer les stocks, créances, dettes et soldes historiques.')
+    st.write('**Dashboard** : consulter la situation actuelle et les alertes prioritaires.')
+    st.write('**Évolution historique** : suivre les quatre indicateurs dans le temps.')
+    st.caption('Les imports sont conservés pendant cette session de navigation. '
+               'Ils ne constituent pas une sauvegarde permanente après fermeture ou redémarrage.')
+    st.stop()
+
+if view == 'Données':
+    st.title('Données')
+    st.caption('Importez vos CSV, puis utilisez la barre de gauche pour consulter vos indicateurs.')
+    upload_definitions = [
+        ('Stocks (CSV)', 'stocks', 'Produit, Quantité, Seuil minimum, Coût unitaire (DH)'),
+        ('Créances clients (CSV)', 'clients', 'Client, Montant (DH), Échéance, Payée'),
+        ('Dettes fournisseurs (CSV)', 'fournisseurs', 'Fournisseur, Montant (DH), Échéance, Payée'),
+        ('Historique des soldes (CSV)', 'historique', 'Date, Stocks, Créances clients, Dettes fournisseurs'),
+    ]
+    for offset in (0, 2):
+        cols = st.columns(2)
+        for col, (label, name, columns) in zip(cols, upload_definitions[offset:offset+2]):
+            with col:
+                storage_key, widget_key = f'saved_{name}', f'upload_{name}'
+                st.subheader(label.replace(' (CSV)', ''))
+                st.file_uploader(label, type='csv', key=widget_key,
+                    on_change=remember_upload, args=(widget_key, storage_key))
+                st.caption(f'Colonnes : {columns}')
+                saved = st.session_state.get(storage_key)
+                if saved is not None:
+                    st.caption(f"Fichier actif : {saved['name']}")
+                    st.button('Retirer ce fichier', key=f'remove_{name}',
+                        on_click=forget_upload, args=(storage_key, widget_key))
+                else:
+                    st.caption('Aucun fichier importé.')
+    with st.expander('Formats et modèle d’historique'):
+        st.write('CSV UTF-8 séparé par une virgule ou un point-virgule. '
+                 'Dates : AAAA-MM-JJ. Payée : True ou False. Montants en DH.')
+        st.write('Historique : une ligne par date avec les soldes des stocks, des créances '
+                 'non payées et des dettes non payées à cette date.')
         st.download_button('Télécharger le modèle CSV',
             data='Date;Stocks;Créances clients;Dettes fournisseurs\n2026-01-31;18000;42000;28000\n2026-02-28;16000;38000;27000\n',
             file_name='modele_historique.csv', mime='text/csv')
-        st.caption('Le modèle contient deux lignes fictives à remplacer.')
+        st.caption('Deux lignes fictives à remplacer par vos valeurs.')
+
+stocks = current_file('saved_stocks')
+clients = current_file('saved_clients')
+fournisseurs = current_file('saved_fournisseurs')
+historique = current_file('saved_historique')
 
 try:
     s = read_csv(stocks) if stocks is not None else stocks_demo.copy()
@@ -189,6 +266,81 @@ bfr = stock_value + receivables - payables
 sources = [stocks is not None, clients is not None, fournisseurs is not None]
 source_label = ('Données de démonstration' if not any(sources) else
                 'Données importées' if all(sources) else 'Données mixtes : imports et exemples')
+
+if view == 'Données':
+    st.caption(f'{source_label} · aperçu de la situation actuelle')
+    s_display = s.copy()
+    s_display['Valeur (DH)'] = s_display['Quantité'] * s_display['Coût unitaire (DH)']
+    with st.expander('Consulter le détail des opérations', expanded=False):
+        stock_tab, clients_tab, suppliers_tab = st.tabs(['Stocks', 'Clients', 'Fournisseurs'])
+        with stock_tab:
+            st.dataframe(s_display, use_container_width=True, hide_index=True)
+        with clients_tab:
+            st.dataframe(c, use_container_width=True, hide_index=True)
+        with suppliers_tab:
+            st.dataframe(f, use_container_width=True, hide_index=True)
+
+    if historique is not None:
+        try:
+            st.subheader('Aperçu de l’historique')
+            st.dataframe(validate_history(read_csv(historique)), use_container_width=True, hide_index=True)
+        except (ValueError, KeyError, TypeError, pd.errors.ParserError, UnicodeError) as e:
+            st.error(f'Historique invalide : {e}')
+    st.stop()
+
+if view == 'Évolution historique':
+    st.subheader('Évolution du cycle d’exploitation')
+    history = None
+    if historique is not None:
+        try:
+            history = validate_history(read_csv(historique))
+            st.caption('Historique importé · indépendant des cartes de situation actuelle.')
+        except (ValueError, KeyError, TypeError, pd.errors.ParserError, UnicodeError) as e:
+            st.error(f'Historique invalide : {e}')
+    elif not any(sources):
+        history = validate_history(pd.DataFrame({
+            'Date': pd.date_range(end=pd.Timestamp.today().normalize().replace(day=1), periods=12, freq='MS'),
+            'Stocks': [18000,17500,19200,18100,16500,17200,15800,14900,15200,14100,13800,13500],
+            'Créances clients': [46000,44500,47000,43000,42000,44500,41000,39500,42000,40000,40500,39000],
+            'Dettes fournisseurs': [27000,28000,29500,28500,28000,29000,27500,28000,29500,28500,29000,28000],
+        }))
+        st.caption('DÉMONSTRATION · 12 situations mensuelles fictives, distinctes de la situation actuelle.')
+    else:
+        st.info('Importez un historique dans le panneau Données pour afficher une évolution réelle. '
+                'Les fichiers de situation actuelle ne permettent pas de reconstituer le passé.')
+    if history is not None:
+        period = st.selectbox('Période', ['Tout l’historique', '6 derniers mois', '3 derniers mois'])
+        filtered = history.copy()
+        if period != 'Tout l’historique':
+            months = 6 if period.startswith('6') else 3
+            cutoff = history['Date'].max() - pd.DateOffset(months=months)
+            filtered = history.loc[history['Date'] > cutoff].copy()
+        chart_data = filtered.set_index('Date')
+        st.caption(f"Du {filtered['Date'].iloc[0]:%d/%m/%Y} au {filtered['Date'].iloc[-1]:%d/%m/%Y} · montants en DH")
+        if len(filtered) < 2:
+            st.info('Une seule observation : au moins deux dates sont nécessaires pour tracer une évolution.')
+        panels = [('BFR', '#52cbbb'), ('Stocks', '#78afff'),
+                  ('Créances clients', '#c2a0ff'), ('Dettes fournisseurs', '#ffbf80')]
+        for offset in (0, 2):
+            cols = st.columns(2)
+            for col, (name, color) in zip(cols, panels[offset:offset+2]):
+                with col:
+                    st.markdown(f'#### {name}')
+                    change = filtered[name].iloc[-1] - filtered[name].iloc[0]
+                    st.metric('Dernier solde de la période', money(filtered[name].iloc[-1]),
+                              delta=money(change) if len(filtered) > 1 else None,
+                              delta_color='off')
+                    if len(filtered) > 1:
+                        st.line_chart(chart_data[[name]], color=color, height=240)
+        with st.expander('Consulter les valeurs historiques'):
+            st.dataframe(filtered, use_container_width=True, hide_index=True)
+
+    st.stop()
+
+st.markdown('<div class="hero"><div class="eyebrow">BFR360 · PILOTAGE FINANCIER</div>'
+            '<h1>Votre cycle d’exploitation, en un regard.</h1>'
+            '<p>Suivez vos besoins de financement, vos stocks et vos échéances.</p></div>',
+            unsafe_allow_html=True)
 st.markdown('<div class="section-label">Situation actuelle</div>', unsafe_allow_html=True)
 st.caption(f'{source_label} · Échéances évaluées au {date.today():%d/%m/%Y}')
 m1, m2, m3, m4 = st.columns(4)
@@ -236,60 +388,3 @@ for _, _, severity, priority, title, detail in alerts:
     st.markdown(f'<div class="alert-card {severity}"><div class="priority">{escape(priority)}</div>'
                 f'<strong>{escape(title)}</strong><p>{escape(detail)}</p></div>', unsafe_allow_html=True)
 
-st.divider()
-show_history = st.toggle('Afficher le dashboard d’évolution', value=False)
-if show_history:
-    st.subheader('Évolution du cycle d’exploitation')
-    history = None
-    if historique is not None:
-        try:
-            history = validate_history(read_csv(historique))
-            st.caption('Historique importé · indépendant des cartes de situation actuelle.')
-        except (ValueError, KeyError, TypeError, pd.errors.ParserError, UnicodeError) as e:
-            st.error(f'Historique invalide : {e}')
-    elif not any(sources):
-        history = validate_history(pd.DataFrame({
-            'Date': pd.date_range(end=pd.Timestamp.today().normalize().replace(day=1), periods=12, freq='MS'),
-            'Stocks': [18000,17500,19200,18100,16500,17200,15800,14900,15200,14100,13800,13500],
-            'Créances clients': [46000,44500,47000,43000,42000,44500,41000,39500,42000,40000,40500,39000],
-            'Dettes fournisseurs': [27000,28000,29500,28500,28000,29000,27500,28000,29500,28500,29000,28000],
-        }))
-        st.caption('DÉMONSTRATION · 12 situations mensuelles fictives, distinctes de la situation actuelle.')
-    else:
-        st.info('Importez un historique dans le panneau Données pour afficher une évolution réelle. '
-                'Les fichiers de situation actuelle ne permettent pas de reconstituer le passé.')
-    if history is not None:
-        period = st.selectbox('Période', ['Tout l’historique', '6 derniers mois', '3 derniers mois'])
-        filtered = history.copy()
-        if period != 'Tout l’historique':
-            months = 6 if period.startswith('6') else 3
-            cutoff = history['Date'].max() - pd.DateOffset(months=months)
-            filtered = history.loc[history['Date'] > cutoff].copy()
-        chart_data = filtered.set_index('Date')
-        st.caption(f"Du {filtered['Date'].iloc[0]:%d/%m/%Y} au {filtered['Date'].iloc[-1]:%d/%m/%Y} · montants en DH")
-        if len(filtered) < 2:
-            st.info('Une seule observation : au moins deux dates sont nécessaires pour tracer une évolution.')
-        panels = [('BFR', '#52cbbb'), ('Stocks', '#78afff'),
-                  ('Créances clients', '#c2a0ff'), ('Dettes fournisseurs', '#ffbf80')]
-        for offset in (0, 2):
-            cols = st.columns(2)
-            for col, (name, color) in zip(cols, panels[offset:offset+2]):
-                with col:
-                    st.markdown(f'#### {name}')
-                    change = filtered[name].iloc[-1] - filtered[name].iloc[0]
-                    st.metric('Dernier solde de la période', money(filtered[name].iloc[-1]),
-                              delta=money(change) if len(filtered) > 1 else None,
-                              delta_color='off')
-                    if len(filtered) > 1:
-                        st.line_chart(chart_data[[name]], color=color, height=240)
-        with st.expander('Consulter les valeurs historiques'):
-            st.dataframe(filtered, use_container_width=True, hide_index=True)
-
-with st.expander('Consulter le détail des opérations', expanded=False):
-    stock_tab, clients_tab, suppliers_tab = st.tabs(['Stocks', 'Clients', 'Fournisseurs'])
-    with stock_tab:
-        st.dataframe(s_display, use_container_width=True, hide_index=True)
-    with clients_tab:
-        st.dataframe(c, use_container_width=True, hide_index=True)
-    with suppliers_tab:
-        st.dataframe(f, use_container_width=True, hide_index=True)
