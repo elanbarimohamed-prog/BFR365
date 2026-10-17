@@ -149,14 +149,58 @@ def navigate(view):
     st.session_state.active_view = view
 
 
+if 'nav_compact' not in st.session_state:
+    st.session_state.nav_compact = False
+
+
+def toggle_navigation():
+    st.session_state.nav_compact = not st.session_state.nav_compact
+
+
+compact = st.session_state.nav_compact
+rail_width = 76 if compact else 184
+# Replace Streamlit's hide action with a compact mode that retains navigation.
+st.markdown(f"""
+<style>
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="collapsedControl"],
+[data-testid="stSidebarHeader"] {{ display: none !important; }}
+[data-testid="stSidebar"] {{
+    width: {rail_width}px !important;
+    min-width: {rail_width}px !important;
+    max-width: {rail_width}px !important;
+    flex: 0 0 {rail_width}px !important;
+    transform: none !important;
+    margin-left: 0 !important;
+    position: relative !important;
+    left: 0 !important;
+    visibility: visible !important;
+    display: block !important;
+}}
+[data-testid="stSidebarUserContent"] {{ padding: 16px 8px !important; }}
+[data-testid="stSidebar"] [data-testid="stButton"] button {{
+    min-height: 50px; padding: 8px 4px; justify-content: center;
+}}
+[data-testid="stSidebar"] [data-testid="stButton"] button p {{
+    font-size: {'24px' if compact else '15px'};
+}}
+.nav-brand {{ font-size: {'17px' if compact else '22px'}; text-align: center; padding: 12px 0 22px; }}
+</style>
+""", unsafe_allow_html=True)
+
 with st.sidebar:
-    st.markdown('<div class="nav-brand">BFR360</div>', unsafe_allow_html=True)
+    st.button('›' if compact else '‹  Replier', key='toggle_navigation',
+              help='Déplier la navigation' if compact else 'Replier en mode icônes',
+              on_click=toggle_navigation, use_container_width=True)
+    st.markdown(f'<div class="nav-brand">{"BFR" if compact else "BFR360"}</div>', unsafe_allow_html=True)
     for label, icon in [('Infos', 'ⓘ'), ('Données', '▤'),
                         ('Dashboard', '▦'), ('Évolution historique', '↗')]:
-        st.button(f'{icon}  {label}', key=f'nav_{label}',
+        st.button(icon if compact else f'{icon}  {label}', key=f'nav_{label}',
                   type='primary' if st.session_state.active_view == label else 'secondary',
                   use_container_width=True, on_click=navigate, args=(label,), help=label)
-    st.markdown('<div class="nav-foot">PILOTAGE FINANCIER<br>Montants en DH</div>', unsafe_allow_html=True)
+    if not compact:
+        st.markdown('<div class="nav-foot">PILOTAGE FINANCIER<br>Montants en DH</div>', unsafe_allow_html=True)
 
 view = st.session_state.active_view
 
