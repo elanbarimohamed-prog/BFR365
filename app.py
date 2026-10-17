@@ -219,7 +219,8 @@ with st.sidebar:
     st.button('›' if compact else '‹  Replier', key='toggle_navigation',
               help='Déplier la navigation' if compact else 'Replier en mode icônes',
               on_click=toggle_navigation, use_container_width=True)
-    st.markdown(f'<div class="nav-brand">{"BFR" if compact else "BFR360"}</div>', unsafe_allow_html=True)
+    if not compact:
+        st.markdown('<div class="nav-brand">BFR360</div>', unsafe_allow_html=True)
     for label, icon in [('Infos', 'ⓘ'), ('Données', '▤'),
                         ('Dashboard', '▦'), ('Évolution historique', '↗')]:
         st.button(icon if compact else f'{icon}  {label}', key=f'nav_{label}',
