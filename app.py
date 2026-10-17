@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import altair as alt
 import math
 from io import BytesIO
 from html import escape
@@ -149,6 +150,19 @@ def navigate(view):
     st.session_state.active_view = view
 
 
+def open_component(component):
+    if component in ('Stocks', 'Créances', 'Dettes'):
+        st.session_state.detail_component = component
+        st.session_state.active_view = 'Détails'
+
+
+def on_composition_click():
+    event = st.session_state.get('bfr_composition', {})
+    points = event.get('selection', {}).get('component', [])
+    if points:
+        open_component(points[0].get('Composante'))
+
+
 if 'nav_compact' not in st.session_state:
     st.session_state.nav_compact = False
 
@@ -224,7 +238,8 @@ with st.sidebar:
     for label, icon in [('Infos', 'ⓘ'), ('Données', '▤'),
                         ('Dashboard', '▦'), ('Évolution historique', '↗')]:
         st.button(icon if compact else f'{icon}  {label}', key=f'nav_{label}',
-                  type='primary' if st.session_state.active_view == label else 'secondary',
+                  type='primary' if (st.session_state.active_view == label or
+                      (label == 'Dashboard' and st.session_state.active_view == 'Détails')) else 'secondary',
                   use_container_width=True, on_click=navigate, args=(label,), help=label)
     if not compact:
         st.markdown('<div class="nav-foot">PILOTAGE FINANCIER<br>Montants en DH</div>', unsafe_allow_html=True)
@@ -338,6 +353,35 @@ sources = [stocks is not None, clients is not None, fournisseurs is not None]
 source_label = ('Données de démonstration' if not any(sources) else
                 'Données importées' if all(sources) else 'Données mixtes : imports et exemples')
 
+if view == 'Détails':
+    component = st.session_state.get('detail_component', 'Stocks')
+    st.button('← Retour au Dashboard', on_click=navigate, args=('Dashboard',))
+    st.title({'Stocks': 'Détail des stocks', 'Créances': 'Détail des créances clients',
+              'Dettes': 'Détail des dettes fournisseurs'}[component])
+    st.caption(source_label)
+    if component == 'Stocks':
+        detail = s.copy()
+        detail['Valeur (DH)'] = detail['Quantité'] * detail['Coût unitaire (DH)']
+        detail['Statut'] = detail.apply(lambda r: 'Rupture' if r['Quantité'] == 0 else
+            'À réapprovisionner' if r['Quantité'] <= r['Seuil minimum'] else 'Disponible', axis=1)
+        st.metric('Valeur totale des stocks', money(stock_value))
+        st.caption('Toutes les références composant la valeur des stocks du graphique.')
+    else:
+        frame = c if component == 'Créances' else f
+        detail = frame.loc[~frame['Payée']].copy()
+        detail['Statut'] = detail['Échéance'].apply(
+            lambda d: 'En retard' if d < date.today() else 'Échéance du jour' if d == date.today() else 'À venir')
+        detail = detail.sort_values('Échéance')
+        st.metric('Total non payé', money(receivables if component == 'Créances' else payables))
+        st.caption('Seules les opérations non payées composent le solde du graphique.')
+        if component == 'Dettes':
+            st.caption('Ce montant positif est soustrait dans le calcul du BFR : la barre correspondante est négative.')
+    if detail.empty:
+        st.info('Aucune opération dans cette composante.')
+    st.dataframe(detail, use_container_width=True, hide_index=True)
+    st.stop()
+
+
 if view == 'Données':
     st.caption(f'{source_label} · aperçu de la situation actuelle')
     s_display = s.copy()
@@ -431,9 +475,26 @@ with left:
                 f'<p>{money(abs(bfr))} · situation calculée à partir des soldes actuels.</p>'
                 '<p>À apprécier au regard de l’activité et du financement disponible.</p></div>',
                 unsafe_allow_html=True)
-    st.bar_chart(pd.DataFrame({'Montant (DH)': [stock_value, receivables, -payables]},
-                 index=['Stocks', 'Créances', 'Dettes']), color='#52cbbb', height=230)
-    st.caption('Composition actuelle en DH · les dettes réduisent le besoin.')
+    composition = pd.DataFrame({'Composante': ['Stocks', 'Créances', 'Dettes'],
+                                'Montant (DH)': [stock_value, receivables, -payables]})
+    selected_component = alt.selection_point(name='component', fields=['Composante'],
+                                             on='click', toggle=False, clear=False)
+    chart = (alt.Chart(composition).mark_bar(cursor='pointer', cornerRadius=4).encode(
+        x=alt.X('Composante:N', sort=['Stocks', 'Créances', 'Dettes'], title=None,
+                axis=alt.Axis(labelAngle=0)),
+        y=alt.Y('Montant (DH):Q', title='Montant (DH)'),
+        color=alt.Color('Composante:N', legend=None,
+                        scale=alt.Scale(domain=['Stocks', 'Créances', 'Dettes'],
+                                        range=['#52cbbb', '#78afff', '#ffbf80'])),
+        tooltip=['Composante:N', alt.Tooltip('Montant (DH):Q', format=',.0f')],
+    ).add_params(selected_component).properties(height=230))
+    st.altair_chart(chart, use_container_width=True, key='bfr_composition',
+                    on_select=on_composition_click, selection_mode=['component'])
+    st.caption('Cliquez sur une barre pour consulter ses détails. Les dettes réduisent le besoin.')
+    # Accessible shortcuts also cover zero-valued components, whose bars are invisible.
+    shortcuts = st.columns(3)
+    for col, component in zip(shortcuts, ['Stocks', 'Créances', 'Dettes']):
+        col.button(component, key=f'detail_{component}', on_click=open_component, args=(component,))
 with right:
     st.subheader('État actuel des stocks')
     stock_label = 'Rupture de stock' if empty else 'Réapprovisionnement à prévoir' if low else 'Stocks au-dessus des seuils'
