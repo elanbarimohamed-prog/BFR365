@@ -39,74 +39,92 @@ def simulate_bfr(stock, receivables, payables, sales, cost, purchases, days, dso
             'payables_effect': target_payables - payables}
 
 
-def render_financial_analysis(stock, receivables, payables, source_label, source_id, demo_allowed):
-    st.title('Analyse financière')
-    st.caption('Comprendre les délais du cycle d’exploitation et tester leur effet sur le BFR.')
-    st.caption(f'Situation disponible : {source_label}. Les hypothèses restent conservées pendant cette session.')
-    defaults = {'start': date.today() - timedelta(days=364), 'end': date.today(),
-                'sales': 0.0, 'cost': 0.0, 'purchases': 0.0,
-                'basis': 'Soldes actuels — estimation',
-                'stock': stock, 'receivables': receivables, 'payables': payables, 'demo': False}
-    fields = list(defaults)
-    if demo_allowed and st.button('Charger un exemple chiffré', key='finance_example'):
-        example = dict(defaults, sales=365000.0, cost=219000.0, purchases=182500.0, demo=True)
-        st.session_state['finance_inputs'] = example
+def financial_page(view):
+    st.session_state.active_view = view
+
+
+def render_financial_analysis(stock, receivables, payables, source_label, source_id, demo_allowed, mode='ratios'):
+    ratios_page = mode == 'ratios'
+    st.title('Ratios financiers' if ratios_page else 'Simulation du BFR')
+    st.caption('Calculer les indicateurs à partir des données de l’entreprise.' if ratios_page else
+               'Tester des délais cibles à partir des derniers ratios calculés.')
+    st.caption(f'Situation disponible : {source_label}.')
+    if ratios_page:
+        balances = st.columns(3)
+        for col, label, value in zip(balances, ['Stocks actuels', 'Créances actuelles', 'Dettes actuelles'],
+                                     [stock, receivables, payables]):
+            col.metric(label, money(value))
+        st.caption('Ces soldes proviennent des données de l’application. Complétez les flux de la même période ci-dessous.')
+    if ratios_page:
+        defaults = {'start': date.today() - timedelta(days=364), 'end': date.today(),
+                    'sales': 0.0, 'cost': 0.0, 'purchases': 0.0,
+                    'basis': 'Soldes actuels — estimation',
+                    'stock': stock, 'receivables': receivables, 'payables': payables, 'demo': False}
+        fields = list(defaults)
+        if demo_allowed and st.button('Charger un exemple chiffré', key='finance_example'):
+            example = dict(defaults, sales=365000.0, cost=219000.0, purchases=182500.0, demo=True)
+            st.session_state['finance_inputs'] = example
+            for field in fields:
+                st.session_state.pop(f'fin_{field}', None)
+            st.session_state.pop('finance_validated', None)
+            st.session_state.pop('finance_scenario', None)
+        saved = st.session_state.get('finance_inputs', defaults)
+        # Widget keys may be cleaned up on other pages; durable session values are separate.
         for field in fields:
-            st.session_state.pop(f'fin_{field}', None)
-        st.session_state.pop('finance_validated', None)
-        st.session_state.pop('finance_scenario', None)
-    saved = st.session_state.get('finance_inputs', defaults)
-    # Widget keys may be cleaned up on other pages; durable session values are separate.
-    for field in fields:
-        st.session_state.setdefault(f'fin_{field}', saved[field])
-    if saved['demo']:
-        st.info('Exemple pédagogique : les flux préremplis sont fictifs. Modifiez-les pour vos propres calculs.')
-    st.subheader('1. Définir la période et les flux')
-    with st.form('finance_assumptions'):
-        col1, col2 = st.columns(2)
-        col1.date_input('Début de période', key='fin_start')
-        col2.date_input('Fin de période', key='fin_end')
-        st.caption('Renseignez les flux cumulés sur cette période. La durée utilise les jours calendaires, bornes incluses.')
-        sales_col, cost_col, purchases_col = st.columns(3)
-        sales_col.number_input('Ventes à crédit (DH)', min_value=0.0, step=1000.0, key='fin_sales',
-            help='Même base fiscale que les créances : ventes TTC si les créances sont TTC, HT si elles sont HT. Exclure les ventes au comptant.')
-        cost_col.number_input('Coût des ventes (DH)', min_value=0.0, step=1000.0, key='fin_cost',
-            help='Coût des biens vendus, cohérent avec la valorisation des stocks. Ne pas saisir le chiffre d’affaires ni remplacer automatiquement par les achats.')
-        purchases_col.number_input('Achats à crédit (DH)', min_value=0.0, step=1000.0, key='fin_purchases',
-            help='Achats correspondant aux dettes fournisseurs étudiées, avec la même base HT ou TTC. Exclure les achats au comptant.')
-        st.caption('Cohérence HT/TTC : utilisez la même base pour chaque couple créances/ventes et dettes/achats. '
-                   'Les stocks et le coût des ventes doivent partager la même base de valorisation.')
-        st.radio('Soldes utilisés pour les ratios',
-                 ['Soldes actuels — estimation', 'Soldes moyens de la période — saisie manuelle'], key='fin_basis')
-        with st.expander('Renseigner les soldes moyens si vous choisissez cette méthode'):
-            st.caption('Ces champs sont utilisés uniquement avec « Soldes moyens ». '
-                       'Saisissez vos moyennes de la période ; les valeurs initiales reprennent les soldes actuels.')
-            avg1, avg2, avg3 = st.columns(3)
-            avg1.number_input('Stock moyen (DH)', min_value=0.0, step=1000.0, key='fin_stock')
-            avg2.number_input('Créances moyennes (DH)', min_value=0.0, step=1000.0, key='fin_receivables')
-            avg3.number_input('Dettes moyennes (DH)', min_value=0.0, step=1000.0, key='fin_payables')
-        submitted = st.form_submit_button('Calculer les ratios', type='primary')
-    if submitted:
-        params = {field: st.session_state[f'fin_{field}'] for field in fields}
-        st.session_state['finance_inputs'] = params
-        st.session_state.pop('finance_validated', None)
-        st.session_state.pop('finance_scenario', None)
-        if params['end'] < params['start']:
-            st.error('La fin de période doit être postérieure ou égale au début.')
-            return
-        amounts = [params[k] for k in ['sales', 'cost', 'purchases', 'stock', 'receivables', 'payables']]
-        if not all(math.isfinite(v) and v >= 0 for v in amounts):
-            st.error('Renseignez des montants finis et positifs ou nuls.')
-            return
-        st.session_state['finance_validated'] = {'params': params, 'source_id': source_id}
-        for key in ['target_dso', 'target_dio', 'target_dpo']:
-            st.session_state.pop(key, None)
+            st.session_state.setdefault(f'fin_{field}', saved[field])
+        if saved['demo']:
+            st.info('Exemple pédagogique : les flux préremplis sont fictifs. Modifiez-les pour vos propres calculs.')
+        st.subheader('1. Définir la période et les flux')
+        with st.form('finance_assumptions'):
+            col1, col2 = st.columns(2)
+            col1.date_input('Début de période', key='fin_start')
+            col2.date_input('Fin de période', key='fin_end')
+            st.caption('Renseignez les flux cumulés sur cette période. La durée utilise les jours calendaires, bornes incluses.')
+            sales_col, cost_col, purchases_col = st.columns(3)
+            sales_col.number_input('Ventes à crédit (DH)', min_value=0.0, step=1000.0, key='fin_sales',
+                help='Même base fiscale que les créances : ventes TTC si les créances sont TTC, HT si elles sont HT. Exclure les ventes au comptant.')
+            cost_col.number_input('Coût des ventes (DH)', min_value=0.0, step=1000.0, key='fin_cost',
+                help='Coût des biens vendus, cohérent avec la valorisation des stocks. Ne pas saisir le chiffre d’affaires ni remplacer automatiquement par les achats.')
+            purchases_col.number_input('Achats à crédit (DH)', min_value=0.0, step=1000.0, key='fin_purchases',
+                help='Achats correspondant aux dettes fournisseurs étudiées, avec la même base HT ou TTC. Exclure les achats au comptant.')
+            st.caption('Cohérence HT/TTC : utilisez la même base pour chaque couple créances/ventes et dettes/achats. '
+                       'Les stocks et le coût des ventes doivent partager la même base de valorisation.')
+            st.radio('Soldes utilisés pour les ratios',
+                     ['Soldes actuels — estimation', 'Soldes moyens de la période — saisie manuelle'], key='fin_basis')
+            with st.expander('Renseigner les soldes moyens si vous choisissez cette méthode'):
+                st.caption('Ces champs sont utilisés uniquement avec « Soldes moyens ». '
+                           'Saisissez vos moyennes de la période ; les valeurs initiales reprennent les soldes actuels.')
+                avg1, avg2, avg3 = st.columns(3)
+                avg1.number_input('Stock moyen (DH)', min_value=0.0, step=1000.0, key='fin_stock')
+                avg2.number_input('Créances moyennes (DH)', min_value=0.0, step=1000.0, key='fin_receivables')
+                avg3.number_input('Dettes moyennes (DH)', min_value=0.0, step=1000.0, key='fin_payables')
+            submitted = st.form_submit_button('Calculer les ratios', type='primary')
+        if submitted:
+            params = {field: st.session_state[f'fin_{field}'] for field in fields}
+            st.session_state['finance_inputs'] = params
+            st.session_state.pop('finance_validated', None)
+            st.session_state.pop('finance_scenario', None)
+            if params['end'] < params['start']:
+                st.error('La fin de période doit être postérieure ou égale au début.')
+                return
+            amounts = [params[k] for k in ['sales', 'cost', 'purchases', 'stock', 'receivables', 'payables']]
+            if not all(math.isfinite(v) and v >= 0 for v in amounts):
+                st.error('Renseignez des montants finis et positifs ou nuls.')
+                return
+            st.session_state['finance_validated'] = {'params': params, 'source_id': source_id}
+            for key in ['target_dso', 'target_dio', 'target_dpo']:
+                st.session_state.pop(key, None)
     validated = st.session_state.get('finance_validated')
     if validated is None:
-        st.info('Renseignez les flux, puis cliquez sur « Calculer les ratios ». Aucun flux n’est déduit des soldes.')
+        st.info('Renseignez les flux, puis cliquez sur « Calculer les ratios ». Aucun flux n’est déduit des soldes.'
+                if ratios_page else 'Calculez d’abord les ratios financiers de l’entreprise pour définir la situation de référence.')
+        if not ratios_page:
+            st.button('Aller aux ratios financiers', on_click=financial_page, args=('Ratios financiers',))
         return
     if validated['source_id'] != source_id:
         st.warning('Les données importées ont changé. Vérifiez la période et les flux, puis recalculez les ratios.')
+        if not ratios_page:
+            st.button('Recalculer les ratios financiers', on_click=financial_page, args=('Ratios financiers',))
         return
     params = validated['params']
     days = (params['end'] - params['start']).days + 1
@@ -115,38 +133,53 @@ def render_financial_analysis(stock, receivables, payables, source_label, source
                                   if average else (stock, receivables, payables))
     sales, cost, purchases = params['sales'], params['cost'], params['purchases']
     ratios = calculate_ratios(base_stock, base_ar, base_ap, sales, cost, purchases, days)
-    st.subheader('2. Lire les délais du cycle')
-    st.caption(f"Calcul validé du {params['start']:%d/%m/%Y} au {params['end']:%d/%m/%Y} · {days} jours · {params['basis']}")
-    if not average:
-        st.caption('Ratios estimatifs : les soldes actuels remplacent les soldes moyens. '
-                   'Les données actuelles doivent correspondre à la fin de la période choisie.')
-    st.caption('Après toute modification des hypothèses ci-dessus, cliquez sur « Calculer les ratios » pour actualiser les résultats.')
-    metrics = st.columns(4)
-    for col, key, label in zip(metrics, ['DSO', 'DIO', 'DPO', 'CCC'],
-            ['DSO · clients', 'DIO · stocks', 'DPO · fournisseurs', 'Cycle de trésorerie']):
-        value = ratios[key]
-        col.metric(label, 'Non calculable' if value is None else f'{value:.1f} j')
-    st.write('Le **DSO** estime le délai d’encaissement ; le **DIO**, la durée de détention du stock ; '
-             'le **DPO**, le délai de règlement des fournisseurs.')
-    if ratios['CCC'] is not None:
-        if ratios['CCC'] >= 0:
-            st.info(f"Le cycle de conversion de trésorerie représente environ {ratios['CCC']:.1f} jours à financer, selon ces hypothèses.")
-        else:
-            st.info('Le cycle est négatif : selon ces hypothèses, les encaissements précèdent en moyenne les règlements fournisseurs. '
-                    'Cela ne représente pas un solde bancaire.')
-    with st.expander('Formules et méthode'):
-        st.markdown('- DSO = Créances de référence ÷ Ventes à crédit × Nombre de jours\n'
-                    '- DIO = Stocks de référence ÷ Coût des ventes × Nombre de jours\n'
-                    '- DPO = Dettes fournisseurs de référence ÷ Achats à crédit × Nombre de jours\n'
-                    '- Cycle de trésorerie = DSO + DIO − DPO')
-        st.write('Un flux nul rend le ratio correspondant non calculable. '
-                 'Ces ratios sont des estimations globales, pas la moyenne exacte des délais de chaque facture. '
-                 'Leur appréciation dépend du secteur et de la saisonnalité.')
-        st.markdown('[Méthode de référence : ACCA — Working capital management]'
-                    '(https://www.accaglobal.com/gb/en/student/exam-support-resources/fundamentals-exams-study-resources/f9/technical-articles/wcm.html)')
-    st.subheader('3. Simuler un changement de délais')
+    if ratios_page:
+        st.subheader('2. Lire les délais du cycle')
+        st.caption(f"Calcul validé du {params['start']:%d/%m/%Y} au {params['end']:%d/%m/%Y} · {days} jours · {params['basis']}")
+        if not average:
+            st.caption('Ratios estimatifs : les soldes actuels remplacent les soldes moyens. '
+                       'Les données actuelles doivent correspondre à la fin de la période choisie.')
+        st.caption('Après toute modification des hypothèses ci-dessus, cliquez sur « Calculer les ratios » pour actualiser les résultats.')
+        metrics = st.columns(4)
+        for col, key, label in zip(metrics, ['DSO', 'DIO', 'DPO', 'CCC'],
+                ['DSO · clients', 'DIO · stocks', 'DPO · fournisseurs', 'Cycle de trésorerie']):
+            value = ratios[key]
+            col.metric(label, 'Non calculable' if value is None else f'{value:.1f} j')
+        st.write('Le **DSO** estime le délai d’encaissement ; le **DIO**, la durée de détention du stock ; '
+                 'le **DPO**, le délai de règlement des fournisseurs.')
+        if ratios['CCC'] is not None:
+            if ratios['CCC'] >= 0:
+                st.info(f"Le cycle de conversion de trésorerie représente environ {ratios['CCC']:.1f} jours à financer, selon ces hypothèses.")
+            else:
+                st.info('Le cycle est négatif : selon ces hypothèses, les encaissements précèdent en moyenne les règlements fournisseurs. '
+                        'Cela ne représente pas un solde bancaire.')
+        with st.expander('Formules et méthode'):
+            st.markdown('- DSO = Créances de référence ÷ Ventes à crédit × Nombre de jours\n'
+                        '- DIO = Stocks de référence ÷ Coût des ventes × Nombre de jours\n'
+                        '- DPO = Dettes fournisseurs de référence ÷ Achats à crédit × Nombre de jours\n'
+                        '- Cycle de trésorerie = DSO + DIO − DPO')
+            st.write('Un flux nul rend le ratio correspondant non calculable. '
+                     'Ces ratios sont des estimations globales, pas la moyenne exacte des délais de chaque facture. '
+                     'Leur appréciation dépend du secteur et de la saisonnalité.')
+            st.markdown('[Méthode de référence : ACCA — Working capital management]'
+                        '(https://www.accaglobal.com/gb/en/student/exam-support-resources/fundamentals-exams-study-resources/f9/technical-articles/wcm.html)')
+        st.button('Passer à la simulation →', type='primary',
+                  on_click=financial_page, args=('Simulation',))
+        return
+
+    st.button('← Consulter ou modifier les ratios', on_click=financial_page, args=('Ratios financiers',))
+    st.subheader('Situation de référence')
+    st.caption(f"Du {params['start']:%d/%m/%Y} au {params['end']:%d/%m/%Y} · {days} jours · {params['basis']}")
+    if params.get('demo'):
+        st.caption('Flux issus de l’exemple pédagogique, éventuellement modifiés.')
+    reference = st.columns(4)
+    for col, key in zip(reference[:3], ['DSO', 'DIO', 'DPO']):
+        col.metric(f'{key} de référence', 'Non calculable' if ratios[key] is None else f'{ratios[key]:.1f} j')
+    reference[3].metric('BFR moyen de référence' if average else 'BFR actuel de référence',
+                        money(base_stock + base_ar - base_ap))
+    st.subheader('Délais cibles du scénario')
     if any(ratios[k] is None for k in ['DSO', 'DIO', 'DPO']):
-        st.warning('Renseignez des ventes à crédit, un coût des ventes et des achats à crédit strictement positifs pour activer le simulateur.')
+        st.warning('Complétez les flux strictement positifs dans « Ratios financiers », puis recalculez pour activer le simulateur.')
         return
     st.caption('Activité et prix constants : ajustez les délais pour estimer les soldes cibles et leur effet sur le BFR.')
     st.caption('Les délais fournisseurs supposent des conditions convenues ; le modèle ne tient pas compte '
