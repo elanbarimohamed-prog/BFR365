@@ -279,6 +279,103 @@ if view == 'Infos':
                 'créances non payées et dettes non payées à cette date.')
     st.caption('Prototype pédagogique • montants en dirhams (DH).')
 
+    st.divider()
+    st.subheader('Comprendre les ratios et leur importance')
+    st.caption('Guide de lecture et bonnes pratiques · ouvrez un indicateur pour consulter les conseils associés.')
+    st.info('Il n’existe pas de seuil idéal universel. Comparez les ratios aux périodes précédentes, '
+            'aux conditions contractuelles et à des entreprises comparables, en tenant compte de la saisonnalité.')
+
+    with st.expander('DSO · Comprendre le délai clients', expanded=True):
+        st.write('Le DSO estime le nombre de jours de ventes à crédit immobilisés dans les créances clients. '
+                 'Il aide à suivre la vitesse d’encaissement et le besoin de financement des ventes.')
+        st.code('DSO = Créances de référence / Ventes à crédit de la période × Nombre de jours', language=None)
+        st.caption('Exemple fictif : 39 000 DH de créances et 365 000 DH de ventes à crédit sur 365 jours donnent un DSO de 39 jours.')
+        st.markdown("""
+| Situation observée | Vérifier avant d’agir | Actions possibles |
+|---|---|---|
+| DSO en hausse ou supérieur aux délais accordés | Factures échues, litiges, erreurs de facturation, changement de clientèle | Corriger les factures, suivre les promesses de règlement et prioriser les relances par ancienneté et montant. |
+| DSO faible ou en baisse | Encaissements effectifs, évolution des ventes, créances sorties du bilan | Maintenir les bonnes pratiques et vérifier que les conditions de paiement ne freinent pas inutilement les ventes. |
+| Retards concentrés chez quelques clients | Encours et litiges de chaque client | Étudier des acomptes et des limites d’encours adaptées, puis convenir d’un échéancier si nécessaire. |
+""")
+        st.caption('Un DSO élevé ne signifie pas que toutes les factures sont en retard : consultez aussi leurs échéances.')
+
+    with st.expander('DIO · Comprendre la durée de stockage'):
+        st.write('Le DIO estime combien de jours de coût des ventes sont immobilisés en stock. '
+                 'Il permet de suivre les fonds mobilisés et d’examiner les risques de surstockage ou de rupture.')
+        st.code('DIO = Stock de référence / Coût des ventes de la période × Nombre de jours', language=None)
+        st.caption('Exemple fictif : 13 500 DH de stock et 219 000 DH de coût des ventes sur 365 jours donnent 22,5 jours.')
+        st.markdown("""
+| Situation observée | Vérifier avant d’agir | Actions possibles |
+|---|---|---|
+| DIO élevé ou en hausse | Produits peu vendus, stock saisonnier, délais de livraison | Analyser par référence, ajuster les quantités commandées et traiter les stocks dormants. |
+| DIO faible avec ruptures | Ventes perdues, fiabilité des fournisseurs, variabilité de la demande | Revoir les seuils de réapprovisionnement et le stock de sécurité. |
+| DIO faible sans rupture | Niveau de service et régularité des livraisons | Préserver cet équilibre et surveiller les références critiques. |
+""")
+        st.caption('Réduire le stock ne libère des fonds que si les achats ou les encaissements évoluent effectivement ; '
+                   'une dépréciation comptable ne génère pas de trésorerie.')
+
+    with st.expander('DPO · Comprendre le délai fournisseurs'):
+        st.write('Le DPO estime le délai de règlement correspondant aux dettes fournisseurs. '
+                 'Il aide à organiser les décaissements et à apprécier le financement apporté par les fournisseurs.')
+        st.code('DPO = Dettes fournisseurs de référence / Achats à crédit de la période × Nombre de jours', language=None)
+        st.caption('Exemple fictif : 28 000 DH de dettes et 182 500 DH d’achats à crédit sur 365 jours donnent 56 jours.')
+        st.markdown("""
+| Situation observée | Vérifier avant d’agir | Actions possibles |
+|---|---|---|
+| DPO court | Paiements anticipés et escomptes obtenus | Comparer le gain des escomptes au coût de financement ; négocier des conditions adaptées. |
+| DPO long, conforme aux accords | Échéancier et dépendance aux fournisseurs | Planifier les règlements et préserver les relations commerciales. |
+| DPO en hausse avec factures échues | Retards de validation ou manque de trésorerie | Résoudre les blocages, établir un plan de paiement et contacter les fournisseurs concernés. |
+""")
+        st.caption('Un DPO plus élevé n’est pas toujours favorable. Un allongement doit respecter les accords '
+                   'et les règles applicables ; le simulateur ne vaut pas autorisation de retarder un paiement.')
+
+    with st.expander('Cycle de trésorerie · Relier les trois délais'):
+        st.write('Le cycle de conversion de trésorerie rapproche stockage, encaissement et paiement '
+                 'pour estimer la durée du financement du cycle d’exploitation.')
+        st.code('Cycle de trésorerie = DSO + DIO − DPO', language=None)
+        st.caption('Avec les exemples ci-dessus : 39 + 22,5 − 56 = 5,5 jours.')
+        st.markdown("""
+| Situation observée | Comment agir |
+|---|---|
+| Cycle positif ou en hausse | Décomposer la variation entre clients, stocks et fournisseurs ; simuler chaque levier et préparer un plan de trésorerie. |
+| Cycle en baisse | Vérifier que l’amélioration vient des encaissements et de la rotation, sans rupture ni retard fournisseur subi. |
+| Cycle négatif | Surveiller les échéances et la stabilité du modèle : la baisse d’activité ou des délais fournisseurs plus courts peuvent modifier l’équilibre. |
+""")
+        st.caption('Un cycle négatif ne garantit ni rentabilité ni trésorerie disponible. '
+                   'Un même nombre de jours peut correspondre à des montants de BFR différents.')
+
+    st.subheader('Bonnes pratiques · Passer du diagnostic à l’action')
+    with st.expander('Fiabiliser les données avant de décider'):
+        st.markdown("""
+- Utiliser la même période pour les ventes, les achats et le coût des ventes.
+- Privilégier des soldes moyens représentatifs ; les soldes actuels donnent une estimation ponctuelle.
+- Aligner la base HT/TTC des créances avec les ventes et des dettes avec les achats.
+- Vérifier les factures réglées, les doublons et la valorisation des stocks.
+- Un flux nul rend le ratio non calculable : ne pas l’interpréter comme un délai de zéro jour.
+""")
+    with st.expander('Organiser un suivi concret'):
+        st.markdown("""
+1. **Chaque semaine** : examiner les factures échues, les échéances à venir et les références en rupture.
+2. **Chaque mois** : comparer les ratios à une période comparable et expliquer les variations avec les équipes concernées.
+3. **Choisir un levier** : définir une action, un responsable, une date et un objectif réaliste.
+4. **Tester dans Simulation** : comparer le BFR de référence et le BFR cible ; intégrer les contraintes commerciales et opérationnelles.
+5. **Mesurer le résultat** : vérifier les encaissements, les stocks et les paiements réellement obtenus, puis ajuster l’objectif.
+""")
+        st.caption('Les gains du simulateur sont des effets théoriques et ponctuels sur la trésorerie, '
+                   'pas des bénéfices. Les coûts d’action, escomptes et variations d’activité doivent être examinés séparément.')
+    with st.expander('Petit lexique des données à renseigner'):
+        st.markdown("""
+- **Ventes à crédit** : ventes avec paiement différé réalisées pendant la période, y compris celles déjà réglées depuis.
+- **Achats à crédit** : achats avec paiement différé réalisés pendant la période, y compris ceux déjà réglés depuis.
+- **Coût des ventes** : coût des biens effectivement vendus. Pour une activité de négoce simple : stock initial + achats nets de marchandises − stock final.
+- **Créances et dettes** : soldes encore non réglés à une date donnée ; ils diffèrent des flux de ventes et d’achats.
+""")
+    st.caption('Les conseils de ce guide sont des pistes d’analyse à adapter à votre activité, '
+               'pas un diagnostic automatique de vos données.')
+    st.markdown('[Référence pédagogique : ACCA — Gestion du fonds de roulement]'
+                '(https://www.accaglobal.com/gb/en/student/exam-support-resources/fundamentals-exams-study-resources/f9/technical-articles/wcm.html)')
+    st.divider()
+
     st.markdown('### Se repérer dans BFR360')
     st.write('**Données** : importer les stocks, créances, dettes et soldes historiques.')
     st.write('**Dashboard** : consulter la situation actuelle et les alertes prioritaires.')
