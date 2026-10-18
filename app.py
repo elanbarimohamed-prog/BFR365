@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import math
+import hashlib
+from finance import render_financial_analysis
 from io import BytesIO
 from html import escape
 from datetime import date, timedelta
@@ -236,7 +238,7 @@ with st.sidebar:
     if not compact:
         st.markdown('<div class="nav-brand">BFR360</div>', unsafe_allow_html=True)
     for label, icon in [('Infos', 'ⓘ'), ('Données', '▤'),
-                        ('Dashboard', '▦'), ('Évolution historique', '↗')]:
+                        ('Dashboard', '▦'), ('Évolution historique', '↗'), ('Analyse financière', '∑')]:
         st.button(icon if compact else f'{icon}  {label}', key=f'nav_{label}',
                   type='primary' if (st.session_state.active_view == label or
                       (label == 'Dashboard' and st.session_state.active_view == 'Détails')) else 'secondary',
@@ -279,6 +281,7 @@ if view == 'Infos':
     st.write('**Données** : importer les stocks, créances, dettes et soldes historiques.')
     st.write('**Dashboard** : consulter la situation actuelle et les alertes prioritaires.')
     st.write('**Évolution historique** : suivre les quatre indicateurs dans le temps.')
+    st.write('**Analyse financière** : calculer les délais DSO, DIO, DPO et simuler un BFR cible.')
     st.caption('Les imports sont conservés pendant cette session de navigation. '
                'Ils ne constituent pas une sauvegarde permanente après fermeture ou redémarrage.')
     st.stop()
@@ -352,6 +355,14 @@ bfr = stock_value + receivables - payables
 sources = [stocks is not None, clients is not None, fournisseurs is not None]
 source_label = ('Données de démonstration' if not any(sources) else
                 'Données importées' if all(sources) else 'Données mixtes : imports et exemples')
+
+if view == 'Analyse financière':
+    # Bind validated assumptions to the current datasets to avoid stale scenarios.
+    source_id = hashlib.sha256(('\n'.join(df.to_csv(index=False) for df in (s, c, f))
+                                + str(sources)).encode('utf-8')).hexdigest()
+    render_financial_analysis(stock_value, receivables, payables, source_label, source_id, not any(sources))
+    st.stop()
+
 
 if view == 'Détails':
     component = st.session_state.get('detail_component', 'Stocks')
