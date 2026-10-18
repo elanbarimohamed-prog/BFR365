@@ -238,7 +238,7 @@ with st.sidebar:
     if not compact:
         st.markdown('<div class="nav-brand">BFR360</div>', unsafe_allow_html=True)
     for label, icon in [('Infos', 'ⓘ'), ('Données', '▤'),
-                        ('Dashboard', '▦'), ('Évolution historique', '↗'), ('Analyse financière', '∑')]:
+                        ('Dashboard', '▦'), ('Évolution historique', '↗'), ('Ratios financiers', '∑'), ('Simulation', '⇄')]:
         st.button(icon if compact else f'{icon}  {label}', key=f'nav_{label}',
                   type='primary' if (st.session_state.active_view == label or
                       (label == 'Dashboard' and st.session_state.active_view == 'Détails')) else 'secondary',
@@ -246,6 +246,8 @@ with st.sidebar:
     if not compact:
         st.markdown('<div class="nav-foot">PILOTAGE FINANCIER<br>Montants en DH</div>', unsafe_allow_html=True)
 
+if st.session_state.active_view == 'Analyse financière':
+    st.session_state.active_view = 'Ratios financiers'
 view = st.session_state.active_view
 
 
@@ -281,7 +283,8 @@ if view == 'Infos':
     st.write('**Données** : importer les stocks, créances, dettes et soldes historiques.')
     st.write('**Dashboard** : consulter la situation actuelle et les alertes prioritaires.')
     st.write('**Évolution historique** : suivre les quatre indicateurs dans le temps.')
-    st.write('**Analyse financière** : calculer les délais DSO, DIO, DPO et simuler un BFR cible.')
+    st.write('**Ratios financiers** : calculer DSO, DIO, DPO et le cycle de trésorerie avec les données de l’entreprise.')
+    st.write('**Simulation** : tester des délais cibles et leur effet sur le BFR à partir des ratios calculés.')
     st.caption('Les imports sont conservés pendant cette session de navigation. '
                'Ils ne constituent pas une sauvegarde permanente après fermeture ou redémarrage.')
     st.stop()
@@ -356,11 +359,12 @@ sources = [stocks is not None, clients is not None, fournisseurs is not None]
 source_label = ('Données de démonstration' if not any(sources) else
                 'Données importées' if all(sources) else 'Données mixtes : imports et exemples')
 
-if view == 'Analyse financière':
+if view in ('Ratios financiers', 'Simulation'):
     # Bind validated assumptions to the current datasets to avoid stale scenarios.
     source_id = hashlib.sha256(('\n'.join(df.to_csv(index=False) for df in (s, c, f))
                                 + str(sources)).encode('utf-8')).hexdigest()
-    render_financial_analysis(stock_value, receivables, payables, source_label, source_id, not any(sources))
+    render_financial_analysis(stock_value, receivables, payables, source_label, source_id, not any(sources),
+                              mode='ratios' if view == 'Ratios financiers' else 'simulation')
     st.stop()
 
 
